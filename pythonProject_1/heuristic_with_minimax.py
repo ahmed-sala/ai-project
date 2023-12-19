@@ -4,7 +4,7 @@ heuristic to check for possible winning moves or blocking moves if no better
 alternative exists.
 """
 
-
+from colorama import Back, Style, Fore
 
 
 class Board(object):
@@ -94,6 +94,20 @@ class Board(object):
                         return i, x, y
                     cnt += 1
 
+    def find_combo(self, combo):
+        """Given a combination find the coordinates of each part.
+
+        Args:
+            combo (List[int]): Winning combination to search for.
+
+        Returns:
+            List of the coordinates of the starting, middle, and ending.
+        """
+        s, m, e = combo
+        s = self.find(self.board, s)
+        m = self.find(self.board, m)
+        e = self.find(self.board, e)
+        return s, m, e
 
     @staticmethod
     def create_board():
@@ -115,7 +129,24 @@ class Board(object):
             board.append(bt)
         return board
 
+    def get_moves_by_combination(self, player):
+        """Retrieve moves for a player that are in winning combinations.
 
+        Args:
+            player (str): Player to retrieve partially winning moves of.
+
+        Returns:
+            List of partial (or full) winning combinations for the player.
+        """
+        moves = []
+        for combo in self.winning_combos:
+            move = []
+            for cell in combo:
+                b, r, c = self.find(self.board, cell)
+                if self.board[b][r][c] == player:
+                    move += [cell]
+            moves += [move]
+        return moves
 
     def get_moves(self, player):
         """Get the previously made moves for the player.
@@ -123,7 +154,8 @@ class Board(object):
         Args:
             player (str): Player to retrieve moves of.
 
-
+        Returns:
+            List of the available moves of a player.
         """
         moves = []
         cnt = 0
@@ -186,12 +218,30 @@ class Board(object):
                 if won:
                     return player
         return None
+
+    @property
+    def ai_won(self):
+        """bool: Whether or not the AI is the winner."""
+        return self.winner == self.ai
+
+    @property
+    def human_won(self):
+        """bool: Whether or not the Human is the winner."""
+        return self.winner == self.human
+
+    @property
+    def tied(self):
+        """bool: Whether or not the game ended in a tie."""
+        return self.complete and self.winner is None
+
     @property
     def simple_heuristic(self):
         """int: Number of spaces available to win for the AI with the number
         of spaces available for the Human to win subtracted. Higher numbers
         are more favorable for the AI."""
-        return self.check_available(self.ai) - self.check_available(self.human)
+        ai_wins = self.check_available(self.ai)
+        human_wins = self.check_available(self.human)
+        return ai_wins - human_wins
 
     def find_value(self, key):
         """Retrieve the value of the given position.
@@ -211,9 +261,9 @@ class Board(object):
         enemy = self.get_enemy(player)
         wins = 0
         for combo in self.winning_combos:
-            if all([self.find_value(x) == player or
+            if all([self.find_value(x) == player or \
                     self.find_value(x) != enemy for x in combo]):
-                    wins += 1
+                wins += 1
         return wins
 
     def humans_move(self, move):
@@ -225,7 +275,6 @@ class Board(object):
             self.move(move, self.human)
             self.human_turn = False
             return True
-
 
     def computers_move(self):
         """Initiates the process of attempting to find the best (or decent)
@@ -324,3 +373,75 @@ class Board(object):
             return self.ai
         else:
             return self.human
+
+    def display(self):
+        """Displays the game's current state in text form.
+
+        Winning combinations are shown in blue, numbers are given to aid
+        the player in choosing a move. Red is used to indicate a player has
+        made a move on that location.
+        """
+        cnt = 0
+        for i, bd in enumerate(self.board):
+            print('{}{}Board #{}{}'.format(Back.WHITE, Fore.BLACK, i + 1, \
+                                           Style.RESET_ALL))
+            for line in bd:
+                larr = []
+                for cell in line:
+                    bg = Back.RED
+                    if self.winner and cnt in self.winning_combo:
+                        bg = Back.BLUE
+                    if cell in self.players:
+                        s = '{}{:>2}{}'.format(bg, cell * 2, Style.RESET_ALL)
+                    else:
+                        s = '{:>2}'.format(cell)
+                    larr += [s]
+                    cnt += 1
+                print(' '.join(larr))
+
+    def _get_human_input(self):
+        """Prompts the user for a position, upon completion makes the
+        move."""
+        position = input('Which position? ')
+        while not position.isdigit():
+            position = input('Integer required; which position? ')
+        position = int(position)
+        if position not in self.allowed_moves:
+            self._get_human_input()
+        self.humans_move(position)
+
+    def play(self):
+        """Primary game loop.
+
+        Until the game is complete we will alternate between computer and
+        player turns while printing the current game state.
+        """
+        try:
+            while not self.complete:
+                if self.human_turn:
+                    self.display()
+                    self._get_human_input()
+                else:
+                    self.computers_move()
+
+            print('{}{} won!'.format(Style.BRIGHT, self.winner))
+            self.display()
+        except KeyboardInterrupt:
+            print('\nWhat? Giving up already?')
+
+
+if __name__ == '__main__':
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument(
+        '--human-first', dest='human_first', help='Whether or not to allow the human to move first',
+        action='store_true',
+        default=True
+    )
+    parser.add_argument(
+        '--ply', dest='ply', help='Number of moves to look ahead',
+        type=int, default=1
+    )
+    args = parser.parse_args()
+    Board(human_first=args.human_first, ply=args.ply).play()

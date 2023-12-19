@@ -3,6 +3,7 @@ import tkinter as tk  # For StringVar
 from tkinter import ttk  # For dropdown
 
 
+
 # Assuming you have these classes in separate files
 # For instance, create a stub Board class in each of these files
 
@@ -51,9 +52,10 @@ class TTTUI(object):
 
         # Dropdown for file selection
         self.selected_file = tk.StringVar()
-        files = ['heuristic with alphabita', 'heuristic with minimax']
+        files = ['heuristic with alphabeta', 'heuristic with minimax']
         self.file_dropdown = ttk.Combobox(self.file_frame, textvariable=self.selected_file, values=files)
         self.file_dropdown.current(0)  # Set default selection
+        self.selected_file.set(files[0])  # Ensure the default value is set
         self.file_dropdown.pack(side=LEFT)
 
         # Button to confirm file selection
@@ -73,14 +75,22 @@ class TTTUI(object):
         self.ply_box.pack(side=RIGHT, fill=BOTH, expand=True)
 
         # start UI
+        self.update_pieces()
+        self.start()
         self.root.mainloop()
 
     def toggle_human_first(self):
         self.human_first = not self.human_first
-        self.toggle_human_first_btn.config(text='Human First' if self.human_first else 'Computer First')
+        self.toggle_human_first_btn.config(text='Human First' if \
+            self.human_first else 'Computer First')
         self.reset()
 
-
+    def _find_button(self, frame, r, c):
+        for child in list(frame.children.values()):
+            info = child.grid_info()
+            if info['row'] == r and info['column'] == c:
+                return child
+        return None
 
     def update_pieces(self):
         player_pieces = self.ttt.get_moves(self.ttt.human)
@@ -102,7 +112,8 @@ class TTTUI(object):
                     if self.ttt.complete and cnt in self.ttt.winning_combo:
                         color = self.win_color
                     btn = self.button_pos[cnt]
-                    btn.config(text=text, bg=color, state=DISABLED if occupied else NORMAL)
+                    btn.config(text=text, bg=color, state=DISABLED if \
+                        occupied else NORMAL)
                     cnt += 1
 
     def place_human(self, position):
@@ -119,7 +130,8 @@ class TTTUI(object):
 
     def reset(self):
         self.ttt.reset()
-        self.ttt.ply = self.default_ply if not self.ply_box.get().isdigit() else int(self.ply_box.get())
+        self.ttt.difficulty = self.default_ply if not \
+            self.ply_box.get().isdigit() else int(self.ply_box.get())
         self.ttt.human_turn = self.human_first
         self.update_pieces()
         self.start()
@@ -143,7 +155,7 @@ class TTTUI(object):
 
     def import_board(self):
         selected_option = self.selected_file.get()
-        if selected_option == 'heuristic with alphabita':
+        if selected_option == 'heuristic with alphabeta':
             from heuristic_with_alphabita import Board
         elif selected_option == 'heuristic with minimax':
             from heuristic_with_minimax import Board

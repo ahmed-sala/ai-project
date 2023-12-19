@@ -3,6 +3,10 @@ Basic 3D Tic Tac Toe with Minimax and Alpha-Beta pruning, using a simple
 heuristic to check for possible winning moves or blocking moves if no better
 alternative exists.
 """
+
+from colorama import Back, Style, Fore
+
+
 class Board(object):
     """3D TTT logic and underlying game state object.
 
@@ -235,7 +239,9 @@ class Board(object):
         """int: Number of spaces available to win for the AI with the number
         of spaces available for the Human to win subtracted. Higher numbers
         are more favorable for the AI."""
-        return self.check_available(self.ai) - self.check_available(self.human)
+        ai_wins = self.check_available(self.ai)
+        human_wins = self.check_available(self.human)
+        return ai_wins - human_wins
 
     def find_value(self, key):
         """Retrieve the value of the given position.
@@ -257,7 +263,7 @@ class Board(object):
         for combo in self.winning_combos:
             if all([self.find_value(x) == player or \
                     self.find_value(x) != enemy for x in combo]):
-                    wins += 1
+                wins += 1
         return wins
 
     def humans_move(self, move):
@@ -270,15 +276,6 @@ class Board(object):
             self.human_turn = False
             return True
 
-    def spatial_heuristic(self):
-        """Evaluate the board based on spatial patterns and configurations.
-
-        Returns:
-            int: Heuristic value indicating the desirability of the current state for the AI.
-        """
-        ai_wins = self.check_available(self.ai)
-        human_wins = self.check_available(self.human)
-        return ai_wins - human_wins
     def computers_move(self):
         """Initiates the process of attempting to find the best (or decent)
         move possible from the available positions on the board."""
@@ -298,9 +295,11 @@ class Board(object):
                 if h >= best_score:
                     best_score = h
                     best_move = move
-                self.undo_move(move)
+                    self.undo_move(move)
+                else:
+                    self.undo_move(move)
 
-                # Check if it blocks the player
+                # see if it blocks the player
                 self.move(move, self.human)
                 if self.complete and self.winner == self.human:
                     if 1001 >= best_score:
@@ -313,34 +312,44 @@ class Board(object):
         self.human_turn = True
 
     def think_ahead(self, player, a, b):
-        if self.depth_count == self.difficulty or self.complete:
-            return self.spatial_heuristic()  # Use the heuristic at a specific depth or terminal states
         if self.depth_count <= self.difficulty:
             self.depth_count += 1
             if player == self.ai:
-                best_score = -1000
+                h = -1000
                 for move in self.allowed_moves:
                     self.move(move, player)
-                    score = self.think_ahead(self.get_enemy(player), a, b)
-                    self.undo_move(move)
-                    best_score = max(best_score, score)
-                    a = max(a, best_score)
+                    if self.complete:
+                        self.undo_move(move)
+                        return 1000
+                    else:
+                        h = self.think_ahead(self.human, a, b)
+                        if h > a:
+                            a = h
+                            self.undo_move(move)
+                        else:
+                            self.undo_move(move)
                     if a >= b:
                         break
-                return best_score
+                return a
             else:
-                best_score = 1000
+                h = 1000
                 for move in self.allowed_moves:
                     self.move(move, player)
-                    score = self.think_ahead(self.get_enemy(player), a, b)
-                    self.undo_move(move)
-                    best_score = min(best_score, score)
-                    b = min(b, best_score)
+                    if self.complete:
+                        self.undo_move(move)
+                        return -1000
+                    else:
+                        h = self.think_ahead(self.ai, a, b)
+                        if h < b:
+                            b = h
+                            self.undo_move(move)
+                        else:
+                            self.undo_move(move)
                     if a >= b:
                         break
-                return best_score
+                return b
         else:
-            return self.spatial_heuristic()
+            return self.simple_heuristic
 
     def undo_move(self, position):
         """Reverses a move."""
@@ -372,6 +381,74 @@ class Board(object):
         else:
             return self.human
 
+    def display(self):
+        """Displays the game's current state in text form.
+
+        Winning combinations are shown in blue, numbers are given to aid
+        the player in choosing a move. Red is used to indicate a player has
+        made a move on that location.
+        """
+        cnt = 0
+        for i, bd in enumerate(self.board):
+            print('{}{}Board #{}{}'.format(Back.WHITE, Fore.BLACK, i + 1, \
+                                           Style.RESET_ALL))
+            for line in bd:
+                larr = []
+                for cell in line:
+                    bg = Back.RED
+                    if self.winner and cnt in self.winning_combo:
+                        bg = Back.BLUE
+                    if cell in self.players:
+                        s = '{}{:>2}{}'.format(bg, cell * 2, Style.RESET_ALL)
+                    else:
+                        s = '{:>2}'.format(cell)
+                    larr += [s]
+                    cnt += 1
+                print(' '.join(larr))
+
+    def _get_human_input(self):
+        """Prompts the user for a position, upon completion makes the
+        move."""
+        position = input('Which position? ')
+        while not position.isdigit():
+            position = input('Integer required; which position? ')
+        position = int(position)
+        if position not in self.allowed_moves:
+            self._get_human_input()
+        self.humans_move(position)
+
+    def play(self):
+        """Primary game loop.
+
+        Until the game is complete we will alternate between computer and
+        player turns while printing the current game state.
+        """
+        try:
+            while not self.complete:
+                if self.human_turn:
+                    self.display()
+                    self._get_human_input()
+                else:
+                    self.computers_move()
+
+            print('{}{} won!'.format(Style.BRIGHT, self.winner))
+            self.display()
+        except KeyboardInterrupt:
+            print('\nWhat? Giving up already?')
 
 
+if __name__ == '__main__':
+    from argparse import ArgumentParser
 
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument(
+        '--human-first', dest='human_first', help='Whether or not to allow the human to move first',
+        action='store_true',
+        default=True
+    )
+    parser.add_argument(
+        '--ply', dest='ply', help='Number of moves to look ahead',
+        type=int, default=1
+    )
+    args = parser.parse_args()
+    Board(human_first=args.human_first, ply=args.ply).play()
